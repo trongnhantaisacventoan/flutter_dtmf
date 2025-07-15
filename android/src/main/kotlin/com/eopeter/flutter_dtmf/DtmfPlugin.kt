@@ -1,7 +1,10 @@
 package com.eopeter.flutter_dtmf
+import android.app.NotificationManager
 import android.content.Context
+import android.content.Intent
 import android.media.ToneGenerator
 import android.media.AudioManager
+import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat.getSystemService
@@ -57,6 +60,18 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
+    fun checkAndRequestDndPermission(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val notificationManager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (!notificationManager.isNotificationPolicyAccessGranted) {
+                val intent = Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                context.startActivity(intent)
+            }
+        }
+    }
+
     private fun playTone(
         digits: String,
         durationMs: Int,
@@ -64,6 +79,18 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
         ignoreDtmfSystemSettings: Boolean,
         forceMaxVolume: Boolean
     ) {
+        val notificationManager = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        val isDndEnabled = when (notificationManager.currentInterruptionFilter) {
+            NotificationManager.INTERRUPTION_FILTER_NONE,
+            NotificationManager.INTERRUPTION_FILTER_ALARMS,
+            NotificationManager.INTERRUPTION_FILTER_PRIORITY -> true // DND is active in some form
+            else -> false // DND is off or in a mode that allows all interruptions
+        }
+
+        if (isDndEnabled) {
+        return;
+        }
 
         if (!ignoreDtmfSystemSettings) {
             var isDtmfToneDisabled = false
@@ -93,7 +120,14 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
         }
         // Set the volume level as a percentage
         var targetVolume = volume * maxVolume
-        audioManager.setStreamVolume(streamType, targetVolume.toInt(), 0)
+
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || notificationManager.isNotificationPolicyAccessGranted) {
+            audioManager.setStreamVolume(streamType, targetVolume.toInt(), 0)
+        } else {
+            Log.e("DtmfPlugin", "No DND permission: cannot change volume")
+        }
+
         // Adjust volume using AudioManager
         var toneGenerator = ToneGenerator(streamType, targetVolume.toInt())
 
