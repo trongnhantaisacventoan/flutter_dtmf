@@ -1,11 +1,8 @@
 package com.eopeter.flutter_dtmf
 
-import android.app.NotificationManager
 import android.content.Context
-import android.content.Intent
 import android.media.AudioManager
 import android.media.ToneGenerator
-import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -43,8 +40,8 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
             val samplingRate = arguments?.get("samplingRate") as? Float
             val durationMs = arguments?.get("durationMs") as? Int
             val volume = arguments?.get("volume") as Double
-            val ignoreDtmfSystemSettings = arguments?.get("ignoreDtmfSystemSettings") as Boolean
-            val forceMaxVolume = arguments?.get("forceMaxVolume") as Boolean
+            val ignoreDtmfSystemSettings = arguments["ignoreDtmfSystemSettings"] as Boolean
+            val forceMaxVolume = arguments["forceMaxVolume"] as Boolean
             if (digits != null) {
                 playTone(
                     digits.trim(),
@@ -75,7 +72,7 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
         }
 
         if (!isCanPlaySound) {
-            return;
+            return
         }
 
         if (!ignoreDtmfSystemSettings) {
@@ -85,7 +82,7 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
                 isDtmfToneDisabled = Settings.System.getInt(
                     applicationContext.contentResolver,
                     Settings.System.DTMF_TONE_WHEN_DIALING, 1
-                ) == 0;
+                ) == 0
             } catch (e: Settings.SettingNotFoundException) {
                 Log.e("DTMFPlugin", e.toString())
             }
@@ -94,22 +91,21 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
                     "DTMFPlugin",
                     "No sound is played : Dtmf Tone is disabled on device and not ignored."
                 )
-                return;
+                return
             }
         }
 
         val streamType = AudioManager.STREAM_DTMF
 
-        var maxVolume = audioManager.getStreamMaxVolume(streamType)
-        if (forceMaxVolume) {
-            maxVolume = 100
+        val toneVolumePercent = if (forceMaxVolume) {
+            100
+        } else {
+            val userVolume = audioManager.getStreamVolume(streamType)
+            val maxVolume = audioManager.getStreamMaxVolume(streamType)
+            (userVolume.toFloat() / maxVolume.toFloat() * 100).toInt()
         }
-        // Set the volume level as a percentage
-        val targetVolume = volume * maxVolume
 
-        audioManager.setStreamVolume(streamType, targetVolume.toInt(), 0)
-        // Adjust volume using AudioManager
-        val toneGenerator = ToneGenerator(streamType, targetVolume.toInt())
+        val toneGenerator = ToneGenerator(streamType, toneVolumePercent)
 
         Thread {
             for (i in digits.indices) {
@@ -118,7 +114,7 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
                     toneGenerator.startTone(toneType, durationMs)
                 Thread.sleep((durationMs + 80).toLong())
             }
-            toneGenerator.release(); //Is needed to be able to play at high frequency !
+            toneGenerator.release() //Is needed to be able to play at high frequency !
         }.start()
     }
 
@@ -149,6 +145,5 @@ class DtmfPlugin : FlutterPlugin, MethodCallHandler {
         channel?.setMethodCallHandler(null)
         channel = null
     }
-
 
 }
